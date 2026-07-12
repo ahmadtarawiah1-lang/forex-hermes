@@ -1,9 +1,16 @@
 # paper-trading-bot
 
-A **paper-trading only** bot for BTCUSDT on the 5-minute timeframe, built in
+A **paper-trading only** bot for BTC-USD on the 5-minute timeframe, built in
 TypeScript/Node.js. It runs a 9/21 moving-average crossover strategy against
-real Binance market data, sizes trades by risking 2% of equity per trade,
+real Coinbase market data, sizes trades by risking 2% of equity per trade,
 and learns from its own real closed trades via a two-file memory system.
+
+Originally built against Binance's public klines endpoint (BTCUSDT). CI
+(GitHub Actions) showed that endpoint returns HTTP 451 — Binance geo-blocks
+the US-based infrastructure those runners use — so the data source was
+switched to Coinbase's public Exchange candles endpoint, which isn't
+geo-blocked for US infra. See `.github/workflows/paper-trading-bot-verify.yml`
+for the CI run that caught this and confirmed the fix.
 
 There is no live-trading path anywhere in this codebase — no broker/exchange
 credentials are requested, stored, or required to run any command below.
@@ -13,8 +20,8 @@ this bot was built from.
 
 ## What it does
 
-- Fetches real BTCUSDT candles from Binance's **public** klines endpoint
-  (no API key, no account, no order capability at that endpoint).
+- Fetches real BTC-USD candles from Coinbase's **public** Exchange candles
+  endpoint (no API key, no account, no order capability at that endpoint).
 - Evaluates a 9-period fast / 21-period slow moving-average crossover.
 - Sizes any BUY/SELL signal to risk 2% of paper equity, with a stop-loss and
   take-profit derived from that same risk model (see Risk model, below).
@@ -57,17 +64,21 @@ a note telling you to run `replay:raw` first, then proceeds identically to
 `replay:raw` (there's nothing to skip yet) rather than silently doing
 nothing.
 
-### A note on this sandbox
+### A note on where this was verified
 
-Binance's public API (`api.binance.com`) is blocked by this environment's
-network egress policy (confirmed 403 from the proxy). Every command above
-was run here and failed with that blocker printed honestly — the bot does
-not fall back to fake or generated candles. Run these same commands from a
-network that can reach `api.binance.com` to see real output.
+The sandbox this bot was originally built in blocks every public
+market-data host by network egress policy (confirmed via the proxy's status
+endpoint against six different providers) — commands there fail with that
+blocker printed honestly rather than falling back to fake data. Real
+verification happens in CI (`.github/workflows/paper-trading-bot-verify.yml`),
+which runs on GitHub-hosted runners with normal internet access. That CI run
+is also what caught Binance's geo-block (HTTP 451) and confirmed the
+Coinbase switch actually works end to end.
 
 ## Where things live
 
-- `src/market.ts` — Binance public klines fetch.
+- `src/market.ts` — Coinbase public candles fetch (auto-paginates past the
+  300-candle-per-request cap).
 - `src/strategy.ts` — moving-average crossover signal.
 - `src/risk.ts` — position sizing, stop/target, max-position and
   max-daily-drawdown checks.
@@ -124,8 +135,8 @@ periods, equity, risk %, stop/target %, position cap, and drawdown limit.
 
 - There is no broker/exchange order-placing code anywhere in this project —
   `execution.ts` only constructs an in-memory `Decision` record.
-- The only network call this project makes is a `GET` to Binance's public,
-  unauthenticated klines endpoint.
+- The only network call this project makes is a `GET` to Coinbase's public,
+  unauthenticated candles endpoint.
 - No API keys are read, requested, or required by any command.
 - `.env` is gitignored; `.env.example` documents that any future broker
   integration must stay paper/test-mode and must never be committed.
@@ -136,7 +147,7 @@ periods, equity, risk %, stop/target %, position cap, and drawdown limit.
   live trading.
 - No secrets in source, no secrets in logs, no frontend (so no frontend
   credential exposure either).
-- Market data or nothing: if Binance's public endpoint is unreachable, the
+- Market data or nothing: if Coinbase's public endpoint is unreachable, the
   bot fails with a clear, honest error — it never substitutes generated or
   fixture candles.
 - Memory only ever learns from real replay/paper outcomes; nothing is

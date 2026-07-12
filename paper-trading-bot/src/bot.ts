@@ -15,7 +15,7 @@ function log(label: string, message: string): void {
  * it reports what the bot would do right now.
  */
 export async function scan(strategy: StrategyConfig, riskConfig: RiskConfig): Promise<void> {
-  log("MARKET", `Fetching ${strategy.interval} candles for ${strategy.symbol} from Binance public klines...`);
+  log("MARKET", `Fetching ${strategy.interval} candles for ${strategy.symbol} from Coinbase's public candles endpoint...`);
 
   const candles = await fetchKlines(strategy.symbol, strategy.interval, 50);
   const lastIndex = candles.length - 1;

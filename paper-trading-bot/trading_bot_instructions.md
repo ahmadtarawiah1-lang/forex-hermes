@@ -2,17 +2,26 @@
 
 ## 1. Project Goal
 
-Build a **paper-trading** bot for BTCUSDT on the 5-minute timeframe. The bot
-watches real Binance market data, evaluates a moving-average crossover
+Build a **paper-trading** bot for BTC-USD on the 5-minute timeframe. The bot
+watches real Coinbase market data, evaluates a moving-average crossover
 strategy, and simulates trades — it never places a real order. Paper/test
 mode is the only mode this project supports; there is no live-execution path
 to switch on.
+
+**Venue note**: the original build used Binance's public klines endpoint for
+BTCUSDT. Verifying it in CI (GitHub Actions) showed that endpoint returns
+HTTP 451 — Binance geo-blocks the US-based infrastructure those runners use,
+which is a structural limitation, not a policy or code bug. The data source
+was switched to Coinbase's public Exchange candles endpoint (BTC-USD, no
+API key, no geo-block for US infra) so the bot actually runs in CI. The
+strategy/risk/memory rules below are unchanged — only the venue and symbol
+naming changed.
 
 ## 2. Safety Rules
 
 - Paper trading by default, always. No flag or config enables live trading.
 - No API keys or secrets are required, requested, or stored — market data
-  comes from Binance's public (unauthenticated) klines endpoint.
+  comes from Coinbase's public (unauthenticated) Exchange candles endpoint.
 - No secrets are ever written to source, logs, or `data/` files.
 - No credentials are exposed to any frontend — this project has no frontend.
 - No action (BUY/SELL) is taken unless the risk check passes; failing risk
@@ -57,7 +66,7 @@ plot(fastMA, color=color.blue, title="Fast MA")
 plot(slowMA, color=color.orange, title="Slow MA")
 ```
 
-To validate manually: paste into Pine Editor, add to a BTCUSDT 5m chart as a
+To validate manually: paste into Pine Editor, add to a BTCUSD 5m chart as a
 **strategy** (not just an indicator), open Strategy Tester, and review net
 profit, win rate, max drawdown, and profit factor before changing any rule
 above.
@@ -89,8 +98,8 @@ above.
 ## 5. Broker/MCP Rules
 
 - No broker or exchange MCP server is connected. This build uses only
-  Binance's public market-data endpoint (`/api/v3/klines`), which requires
-  no API key and has no order-placing capability.
+  Coinbase's public market-data endpoint (`/products/{id}/candles`), which
+  requires no API key and has no order-placing capability.
 - There is no account, no balance, no open-position, and no open-order
   check against a real venue, because there is no real venue connection —
   by design, this removes any live-trading surface entirely.
@@ -119,7 +128,7 @@ above.
 
 - `npm install`, `npm run scan`, `npm run replay:raw`, `npm run
   replay:memory`, and `npm run memory:reset` all work.
-- The bot uses real Binance market data, or fails with a clearly printed
+- The bot uses real Coinbase market data, or fails with a clearly printed
   blocker if that data is unavailable (e.g. network policy blocks the
   request) — it never substitutes fake or generated candles.
 - Terminal output for `scan` shows: market data fetch, signal, risk check,

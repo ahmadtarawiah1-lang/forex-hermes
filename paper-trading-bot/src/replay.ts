@@ -71,7 +71,7 @@ function simulateForwardExit(
 }
 
 async function loadHistoricalCandles(strategy: StrategyConfig): Promise<Candle[]> {
-  // Binance's public klines endpoint caps a single request at 1000 candles.
+  // market.ts pages this automatically past Coinbase's 300-candle-per-request cap.
   return fetchKlines(strategy.symbol, strategy.interval, 1000);
 }
 

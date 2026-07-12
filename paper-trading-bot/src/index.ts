@@ -5,7 +5,7 @@ import { MarketDataError } from "./market";
 import { RiskConfig, StrategyConfig } from "./types";
 
 const strategyConfig: StrategyConfig = {
-  symbol: "BTCUSDT",
+  symbol: "BTC-USD",
   interval: "5m",
   fastPeriod: 9,
   slowPeriod: 21,
