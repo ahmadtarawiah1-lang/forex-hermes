@@ -1,0 +1,43 @@
+name: paper-trading-bot verify
+
+on:
+  push:
+    branches: [claude/everything-in-there-577hx2]
+    paths: ["paper-trading-bot/**", ".github/workflows/paper-trading-bot-verify.yml"]
+  pull_request:
+    paths: ["paper-trading-bot/**", ".github/workflows/paper-trading-bot-verify.yml"]
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: paper-trading-bot
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: scan
+        run: npm run scan
+
+      - name: replay:raw
+        run: npm run replay:raw
+
+      - name: replay:memory
+        run: npm run replay:memory
+
+      - name: memory:reset
+        run: npm run memory:reset
+
+      - name: replay:memory (post-reset, confirm empty-memory behavior)
+        run: npm run replay:memory
