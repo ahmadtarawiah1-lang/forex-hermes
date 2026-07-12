@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+
+# runtime state — evolves at runtime, not part of source
+state/trades.jsonl
+state/hypotheses.jsonl
+state/heartbeat.json
+state/history/*.yaml
+!state/history/.gitkeep
