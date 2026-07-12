@@ -20,9 +20,10 @@ this bot was built from.
   take-profit derived from that same risk model (see Risk model, below).
 - Simulates the trade as a **paper order only** — nothing is ever sent to a
   real venue.
-- In the memory-enabled path, checks `data/ledger.csv` and
-  `data/learnings.md` before opening a new trade, and skips setups that
-  match a previously-recorded real loss for the same symbol.
+- In the memory-enabled path, checks `data/ledger.csv` before opening a new
+  trade and skips it if the same symbol/action lost within the last 24
+  hours — a bounded cooldown, not a permanent ban (see Risk model below for
+  why permanent was rejected).
 
 ## Install
 
@@ -98,6 +99,11 @@ network that can reach `api.binance.com` to see real output.
   gate only applies to `scan`'s live-instant check; `replay` backtests don't
   track calendar days, so it isn't exercised there — noted here rather than
   silently glossed over.)
+- Memory cooldown: a same-symbol, same-action `LOSS` blocks repeats for 24
+  hours, then trading resumes automatically — see `src/adaptiveFilter.ts`.
+  An earlier version of this rule blocked a symbol forever after any single
+  loss; that was a dead end (nothing could ever execute again to lift the
+  block) and was replaced with this bounded cooldown.
 
 All of the above is configured in `src/index.ts` (`strategyConfig` and
 `riskConfig`) — that's the one place to change symbol, timeframe, MA

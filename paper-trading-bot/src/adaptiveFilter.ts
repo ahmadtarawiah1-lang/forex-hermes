@@ -1,51 +1,50 @@
-import { LedgerRow, readLedger, readLearnings } from "./memory";
+import { LedgerRow, readLedger } from "./memory";
 
 export interface MemoryCheckResult {
   blocked: boolean;
   reason: string;
   matchedLedgerRow: LedgerRow | null;
-  matchedLearningsWarning: boolean;
 }
+
+export const MEMORY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Before any future BUY or SELL: has this symbol lost on a similar setup
- * before, does learnings.md warn about this setup, is this signal repeating
- * a known bad trade? Only real ledger/learnings entries can trigger a block
- * — nothing here is seeded.
+ * recently, is this signal repeating a known-bad trade? Only real ledger
+ * entries can trigger a block — nothing here is seeded.
+ *
+ * This is a bounded cooldown, not a permanent ban: a loss blocks repeats of
+ * that symbol/action for MEMORY_COOLDOWN_MS, then trading resumes. A
+ * permanent "one loss ever = blocked forever" rule would be a dead end —
+ * once blocked, no new trade can ever execute to prove the setup works
+ * again, so the block could never lift.
  */
-export function checkMemory(symbol: string, action: "BUY" | "SELL"): MemoryCheckResult {
+export function checkMemory(symbol: string, action: "BUY" | "SELL", asOf: string): MemoryCheckResult {
   const ledger = readLedger();
-  const priorLoss = ledger.find(
-    (row) => row.symbol === symbol && row.action === action && row.outcome === "LOSS"
-  );
+  const asOfMs = new Date(asOf).getTime();
 
-  const learnings = readLearnings();
-  const learningsWarns = learnings.includes(`${symbol}`) && learnings.toLowerCase().includes("loss");
+  const recentLoss = ledger
+    .filter((row) => row.symbol === symbol && row.action === action && row.outcome === "LOSS")
+    .filter((row) => {
+      const rowMs = new Date(row.timestamp).getTime();
+      return rowMs <= asOfMs && asOfMs - rowMs < MEMORY_COOLDOWN_MS;
+    })
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
 
-  if (priorLoss) {
+  if (recentLoss) {
+    const hoursAgo = ((asOfMs - new Date(recentLoss.timestamp).getTime()) / (60 * 60 * 1000)).toFixed(1);
     return {
       blocked: true,
       reason:
-        `Blocked by memory: a prior real ${action} on ${symbol} at price ${priorLoss.price} ` +
-        `closed as a LOSS (logged ${priorLoss.timestamp}). Repeating a known bad setup — SKIP.`,
-      matchedLedgerRow: priorLoss,
-      matchedLearningsWarning: learningsWarns,
-    };
-  }
-
-  if (learningsWarns) {
-    return {
-      blocked: true,
-      reason: `Blocked by memory: learnings.md contains a warning about ${symbol} losses. SKIP.`,
-      matchedLedgerRow: null,
-      matchedLearningsWarning: true,
+        `Blocked by memory: a real ${action} on ${symbol} at price ${recentLoss.price} closed as a ` +
+        `LOSS ${hoursAgo}h ago (within the ${MEMORY_COOLDOWN_MS / 3_600_000}h cooldown). SKIP.`,
+      matchedLedgerRow: recentLoss,
     };
   }
 
   return {
     blocked: false,
-    reason: `No prior ${symbol} ${action} loss found in ledger.csv, and no matching warning in learnings.md.`,
+    reason: `No ${symbol} ${action} loss within the last ${MEMORY_COOLDOWN_MS / 3_600_000}h in ledger.csv.`,
     matchedLedgerRow: null,
-    matchedLearningsWarning: false,
   };
 }

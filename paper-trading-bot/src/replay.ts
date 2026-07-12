@@ -103,7 +103,7 @@ export async function runReplay(
     const entryTime = new Date(candles[i].closeTime).toISOString();
 
     if (mode === "memory") {
-      const memCheck = checkMemory(strategy.symbol, "BUY");
+      const memCheck = checkMemory(strategy.symbol, "BUY", entryTime);
       if (memCheck.blocked) {
         skips.push({ setupIndex: i, time: entryTime, reason: memCheck.reason });
         const decision: Decision = {

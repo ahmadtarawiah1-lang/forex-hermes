@@ -105,10 +105,15 @@ above.
   mode, outcome, pnl.
 - `data/learnings.md` stores plain-English lessons distilled from real
   closed trades only — nothing is seeded or invented.
-- Both files are read before every future BUY/SELL decision in the
-  memory-enabled path.
-- A setup that matches a previously logged losing pattern for the same
-  symbol becomes `SKIP`.
+- Before every future BUY/SELL in the memory-enabled path, the ledger is
+  checked for a same-symbol, same-action `LOSS` within the last **24
+  hours**. If one exists, the action becomes `SKIP`.
+- This is a bounded cooldown, not a permanent ban. A "one loss ever, blocked
+  forever" rule was tried first and rejected: once blocked, no new trade
+  can ever execute to prove the setup works again, so the block could never
+  lift. A time-boxed cooldown lets the strategy resume once the window
+  passes, which is what makes this an adaptive filter rather than a kill
+  switch.
 
 ## 7. Definition of Done
 
