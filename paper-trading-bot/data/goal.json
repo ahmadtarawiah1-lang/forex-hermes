@@ -1,0 +1,6 @@
+{
+  "targetWinRate": 0.55,
+  "maxAcceptableDrawdownPct": 0.08,
+  "reflectionEvery": 10,
+  "lookbackTrades": 20
+}

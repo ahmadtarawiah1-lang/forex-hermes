@@ -2,23 +2,13 @@ import { scan } from "./bot";
 import { runReplay, ReplaySummary } from "./replay";
 import { resetMemory, readLedger, readLearnings } from "./memory";
 import { MarketDataError } from "./market";
-import { RiskConfig, StrategyConfig } from "./types";
+import { loadState } from "./config";
+import { reflect, ReflectionResult } from "./reflect";
 
-const strategyConfig: StrategyConfig = {
-  symbol: "BTC-USD",
-  interval: "5m",
-  fastPeriod: 9,
-  slowPeriod: 21,
-};
-
-const riskConfig: RiskConfig = {
-  startingEquity: 10_000,
-  riskPctPerTrade: 0.02,
-  stopLossPct: 0.02,
-  takeProfitPct: 0.04,
-  maxPositionPctOfEquity: 1.05,
-  maxDailyDrawdownPct: 0.05,
-};
+const state = loadState();
+const strategyConfig = state.strategy;
+const riskConfig = state.risk;
+const cooldownMs = state.memory.cooldownHours * 3_600_000;
 
 function printSummary(label: string, summary: ReplaySummary): void {
   console.log(`\n=== ${label} summary ===`);
@@ -69,6 +59,15 @@ function printSummary(label: string, summary: ReplaySummary): void {
   }
 }
 
+function printReflection(result: ReflectionResult): void {
+  console.log(`\n=== reflection ===`);
+  if (result.changed) {
+    console.log(`Strategy CHANGED. ${result.reason}`);
+  } else {
+    console.log(`No change. ${result.reason}`);
+  }
+}
+
 async function main(): Promise<void> {
   const command = process.argv[2];
 
@@ -79,8 +78,9 @@ async function main(): Promise<void> {
         break;
 
       case "replay:raw": {
-        const summary = await runReplay(strategyConfig, riskConfig, "raw");
+        const summary = await runReplay(strategyConfig, riskConfig, "raw", cooldownMs);
         printSummary("replay:raw (no memory)", summary);
+        printReflection(reflect());
         break;
       }
 
@@ -93,11 +93,16 @@ async function main(): Promise<void> {
               "Proceeding anyway — this run will behave like replay:raw since there is nothing to skip yet.\n"
           );
         }
-        const summary = await runReplay(strategyConfig, riskConfig, "memory");
+        const summary = await runReplay(strategyConfig, riskConfig, "memory", cooldownMs);
         printSummary("replay:memory (memory-enabled)", summary);
         console.log(`\nLatest learnings.md:\n${readLearnings()}`);
+        printReflection(reflect());
         break;
       }
+
+      case "reflect":
+        printReflection(reflect());
+        break;
 
       case "memory:reset":
         resetMemory();
@@ -106,7 +111,7 @@ async function main(): Promise<void> {
 
       default:
         console.error(
-          `Unknown or missing command: "${command ?? ""}". Use one of: scan, replay:raw, replay:memory, memory:reset.`
+          `Unknown or missing command: "${command ?? ""}". Use one of: scan, replay:raw, replay:memory, reflect, memory:reset.`
         );
         process.exitCode = 1;
     }

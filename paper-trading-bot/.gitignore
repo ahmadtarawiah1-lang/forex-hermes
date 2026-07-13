@@ -1,7 +1,3 @@
 node_modules/
 dist/
 .env
-
-# runtime memory — evolves at runtime, not part of source
-data/ledger.csv
-data/learnings.md

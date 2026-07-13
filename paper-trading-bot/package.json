@@ -2,13 +2,14 @@
   "name": "paper-trading-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Paper-trading bot for BTCUSDT (5m, 9/21 MA crossover) with a raw and memory-enabled replay path. No live trading.",
+  "description": "Paper-trading bot for BTC-USD (5m, 9/21 MA crossover) with a raw and memory-enabled replay path, plus a reflection loop that adjusts its own risk/memory settings from real outcomes. No live trading.",
   "type": "commonjs",
   "scripts": {
     "build": "tsc",
     "scan": "ts-node src/index.ts scan",
     "replay:raw": "ts-node src/index.ts replay:raw",
     "replay:memory": "ts-node src/index.ts replay:memory",
+    "reflect": "ts-node src/index.ts reflect",
     "memory:reset": "ts-node src/index.ts memory:reset"
   },
   "devDependencies": {
