@@ -124,10 +124,31 @@ above.
   passes, which is what makes this an adaptive filter rather than a kill
   switch.
 
+## 6a. Reflection Rules (getting smarter over time)
+
+- `data/goal.json` defines "on track": target win rate (default 55%), max
+  acceptable drawdown (default 8%), how many new closed trades trigger a
+  reflection (default 10), and how many recent trades to score (default 20).
+- `data/strategy_state.json` is the live, evolving strategy/risk/memory
+  config plus a version number — this is what `src/index.ts` actually loads
+  at startup, not a hardcoded constant.
+- Every `reflectionEvery` new real closed trades, `src/reflect.ts` scores the
+  last `lookbackTrades` against the goal and changes **exactly one** thing:
+  drawdown breach → tighten stop-loss/risk (kept equal, preserving the
+  no-leverage invariant) and rescale take-profit to match; else win rate
+  below target → widen the memory cooldown; else → no change.
+- The state version before any change is archived to `data/history/vN.json`
+  and a plain-English line is appended to `data/learnings.md` explaining
+  why. Nothing is ever seeded — only real closed trades feed this.
+- Because GitHub Actions runners are ephemeral, this only works if
+  `data/ledger.csv`, `data/learnings.md`, `data/strategy_state.json`, and
+  `data/history/` are committed back to the repo after each run that
+  accumulates real trades — see the two-workflow split in README.md.
+
 ## 7. Definition of Done
 
 - `npm install`, `npm run scan`, `npm run replay:raw`, `npm run
-  replay:memory`, and `npm run memory:reset` all work.
+  replay:memory`, `npm run reflect`, and `npm run memory:reset` all work.
 - The bot uses real Coinbase market data, or fails with a clearly printed
   blocker if that data is unavailable (e.g. network policy blocks the
   request) — it never substitutes fake or generated candles.

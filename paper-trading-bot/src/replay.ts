@@ -2,7 +2,7 @@ import { fetchKlines } from "./market";
 import { evaluateCrossover } from "./strategy";
 import { evaluateRisk } from "./risk";
 import { checkMemory } from "./adaptiveFilter";
-import { appendLedgerRow, appendLearning, ensureMemoryFiles } from "./memory";
+import { appendLedgerRow, appendLearning, ensureMemoryFiles, readLedger } from "./memory";
 import { Candle, Decision, Mode, RiskConfig, StrategyConfig } from "./types";
 
 export interface ReplayTrade {
@@ -78,10 +78,26 @@ async function loadHistoricalCandles(strategy: StrategyConfig): Promise<Candle[]
 export async function runReplay(
   strategy: StrategyConfig,
   riskConfig: RiskConfig,
-  mode: Mode
+  mode: Mode,
+  cooldownMs: number
 ): Promise<ReplaySummary> {
   ensureMemoryFiles();
   const candles = await loadHistoricalCandles(strategy);
+
+  // The same rolling window of historical candles gets re-fetched on every
+  // scheduled run, so most setups are the same ones seen last run. Without
+  // this guard, an hourly job would re-log near-duplicate rows for the same
+  // real trade every hour, flooding the ledger and corrupting the "N new
+  // closed trades" count reflection relies on.
+  const existingKeys = new Set(
+    readLedger().map((row) => `${row.mode}|${row.symbol}|${row.timestamp}`)
+  );
+  function alreadyLogged(mode: Mode, symbol: string, timestamp: string): boolean {
+    return existingKeys.has(`${mode}|${symbol}|${timestamp}`);
+  }
+  function markLogged(mode: Mode, symbol: string, timestamp: string): void {
+    existingKeys.add(`${mode}|${symbol}|${timestamp}`);
+  }
 
   const trades: ReplayTrade[] = [];
   const skips: ReplaySkip[] = [];
@@ -103,21 +119,24 @@ export async function runReplay(
     const entryTime = new Date(candles[i].closeTime).toISOString();
 
     if (mode === "memory") {
-      const memCheck = checkMemory(strategy.symbol, "BUY", entryTime);
+      const memCheck = checkMemory(strategy.symbol, "BUY", entryTime, cooldownMs);
       if (memCheck.blocked) {
         skips.push({ setupIndex: i, time: entryTime, reason: memCheck.reason });
-        const decision: Decision = {
-          timestamp: entryTime,
-          symbol: strategy.symbol,
-          action: "SKIP",
-          price: entryPrice,
-          quantity: 0,
-          reason: memCheck.reason,
-          mode: "memory",
-          outcome: "NONE",
-          pnl: 0,
-        };
-        appendLedgerRow(decision);
+        if (!alreadyLogged("memory", strategy.symbol, entryTime)) {
+          const decision: Decision = {
+            timestamp: entryTime,
+            symbol: strategy.symbol,
+            action: "SKIP",
+            price: entryPrice,
+            quantity: 0,
+            reason: memCheck.reason,
+            mode: "memory",
+            outcome: "NONE",
+            pnl: 0,
+          };
+          appendLedgerRow(decision);
+          markLogged("memory", strategy.symbol, entryTime);
+        }
         continue;
       }
     }
@@ -130,17 +149,20 @@ export async function runReplay(
 
     if (!risk.approved) {
       skips.push({ setupIndex: i, time: entryTime, reason: risk.reason });
-      appendLedgerRow({
-        timestamp: entryTime,
-        symbol: strategy.symbol,
-        action: "SKIP",
-        price: entryPrice,
-        quantity: 0,
-        reason: risk.reason,
-        mode,
-        outcome: "NONE",
-        pnl: 0,
-      });
+      if (!alreadyLogged(mode, strategy.symbol, entryTime)) {
+        appendLedgerRow({
+          timestamp: entryTime,
+          symbol: strategy.symbol,
+          action: "SKIP",
+          price: entryPrice,
+          quantity: 0,
+          reason: risk.reason,
+          mode,
+          outcome: "NONE",
+          pnl: 0,
+        });
+        markLogged(mode, strategy.symbol, entryTime);
+      }
       continue;
     }
 
@@ -176,30 +198,33 @@ export async function runReplay(
     trades.push(trade);
     inTradeUntil = exit.exitIndex;
 
-    appendLedgerRow({
-      timestamp: exitTime,
-      symbol: strategy.symbol,
-      action: "BUY",
-      price: entryPrice,
-      quantity: risk.quantity,
-      reason: `${signal.reason} Exit: ${exit.exitReason} at ${exit.exitPrice.toFixed(2)}.`,
-      mode,
-      outcome,
-      pnl,
-    });
+    if (!alreadyLogged(mode, strategy.symbol, entryTime)) {
+      appendLedgerRow({
+        timestamp: entryTime,
+        symbol: strategy.symbol,
+        action: "BUY",
+        price: entryPrice,
+        quantity: risk.quantity,
+        reason: `${signal.reason} Exit: ${exit.exitReason} at ${exit.exitPrice.toFixed(2)}.`,
+        mode,
+        outcome,
+        pnl,
+      });
+      markLogged(mode, strategy.symbol, entryTime);
 
-    if (outcome === "LOSS" && !learnedLossThisRun) {
-      appendLearning(
-        `${strategy.symbol} BUY crossover entered at ${entryPrice.toFixed(2)} on ${entryTime} ` +
-          `closed as a LOSS (${exit.exitReason} at ${exit.exitPrice.toFixed(2)}, pnl $${pnl.toFixed(2)}). ` +
-          `Treat repeats of this setup with caution.`
-      );
-      learnedLossThisRun = true;
-    } else if (outcome === "LOSS") {
-      appendLearning(
-        `${strategy.symbol} BUY crossover entered at ${entryPrice.toFixed(2)} on ${entryTime} ` +
-          `closed as another LOSS (${exit.exitReason} at ${exit.exitPrice.toFixed(2)}, pnl $${pnl.toFixed(2)}).`
-      );
+      if (outcome === "LOSS" && !learnedLossThisRun) {
+        appendLearning(
+          `${strategy.symbol} BUY crossover entered at ${entryPrice.toFixed(2)} on ${entryTime} ` +
+            `closed as a LOSS (${exit.exitReason} at ${exit.exitPrice.toFixed(2)}, pnl $${pnl.toFixed(2)}). ` +
+            `Treat repeats of this setup with caution.`
+        );
+        learnedLossThisRun = true;
+      } else if (outcome === "LOSS") {
+        appendLearning(
+          `${strategy.symbol} BUY crossover entered at ${entryPrice.toFixed(2)} on ${entryTime} ` +
+            `closed as another LOSS (${exit.exitReason} at ${exit.exitPrice.toFixed(2)}, pnl $${pnl.toFixed(2)}).`
+        );
+      }
     }
   }
 

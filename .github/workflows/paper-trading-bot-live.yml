@@ -1,0 +1,45 @@
+name: paper-trading-bot live
+
+on:
+  schedule:
+    - cron: "0 * * * *" # hourly — the bot runs against live Coinbase data with no one triggering it
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  run-and-learn:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: paper-trading-bot
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: replay:raw (accumulates real outcomes into the persisted ledger)
+        run: npm run replay:raw
+
+      - name: replay:memory (accumulates memory-filtered decisions)
+        run: npm run replay:memory
+
+      - name: Commit updated ledger, learnings, and strategy state
+        run: |
+          git config user.name "paper-trading-bot"
+          git config user.email "actions@github.com"
+          git add data/ledger.csv data/learnings.md data/strategy_state.json data/history
+          if git diff --cached --quiet; then
+            echo "No new real outcomes this run — nothing to commit."
+          else
+            git commit -m "Automated: hourly live run [skip ci]"
+            git push origin HEAD:main
+          fi
