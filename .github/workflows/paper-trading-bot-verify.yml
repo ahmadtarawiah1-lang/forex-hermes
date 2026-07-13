@@ -2,10 +2,12 @@ name: paper-trading-bot verify
 
 on:
   push:
-    branches: [claude/everything-in-there-577hx2]
+    branches: [main]
     paths: ["paper-trading-bot/**", ".github/workflows/paper-trading-bot-verify.yml"]
   pull_request:
     paths: ["paper-trading-bot/**", ".github/workflows/paper-trading-bot-verify.yml"]
+  schedule:
+    - cron: "0 * * * *" # hourly, so the bot runs against live data with no one triggering it
   workflow_dispatch: {}
 
 jobs:
