@@ -93,6 +93,24 @@ export async function fetchKlines(symbol: string, interval: string, limit: numbe
     end = start;
   }
 
-  const merged = pages.flat();
+  // Consecutive pages are requested with adjacent `start`/`end` boundaries
+  // (each page's `start` becomes the next page's `end`), and Coinbase's
+  // candles endpoint has been observed to include the candle bucket at a
+  // boundary timestamp in both the page ending there and the page starting
+  // there. Left alone, that duplicate candle gets double-counted by the
+  // moving averages at every page boundary (every 300 candles — roughly
+  // once a day for 5m candles), which can shift a fresh-crossover detection
+  // by one candle. De-duplicated by openTime, keeping the first (earliest
+  // page's) occurrence, before merging.
+  const merged: Candle[] = [];
+  const seenOpenTimes = new Set<number>();
+  for (const page of pages) {
+    for (const candle of page) {
+      if (seenOpenTimes.has(candle.openTime)) continue;
+      seenOpenTimes.add(candle.openTime);
+      merged.push(candle);
+    }
+  }
+
   return merged.slice(-limit);
 }

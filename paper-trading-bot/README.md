@@ -173,7 +173,10 @@ Edit `data/goal.json` any time to change what "on track" means.
 ## Where things live
 
 - `src/market.ts` — Coinbase public candles fetch (auto-paginates past the
-  300-candle-per-request cap).
+  300-candle-per-request cap, de-duplicating by candle open time — adjacent
+  pages share a boundary timestamp, and without de-duping, a candle observed
+  at that boundary would get double-counted by the moving averages once per
+  page, roughly once a day for 5m candles).
 - `src/strategy.ts` — moving-average crossover signal.
 - `src/risk.ts` — position sizing, stop/target, max-position and
   max-daily-drawdown checks.
