@@ -8,6 +8,15 @@ on:
 permissions:
   contents: write
 
+# A manual workflow_dispatch overlapping with the hourly schedule (or a rare
+# GitHub Actions double-fire) would let two runs check out the same `main`
+# commit and both try to push — the second push is a non-fast-forward
+# rejection with no retry, silently dropping that run's real trade data.
+# Queuing runs instead of racing them removes that failure mode entirely.
+concurrency:
+  group: paper-trading-bot-live
+  cancel-in-progress: false
+
 jobs:
   run-and-learn:
     runs-on: ubuntu-latest
