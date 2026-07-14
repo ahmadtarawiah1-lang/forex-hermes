@@ -1,4 +1,4 @@
-import { archiveState, Goal, loadGoal, loadState, saveState, StrategyState } from "./config";
+import { archiveState, Goal, listHistory, loadGoal, loadState, saveState, StrategyState } from "./config";
 import { appendLearning, LedgerRow, readLedger } from "./memory";
 import { reflect, ReflectionResult } from "./reflect";
 
@@ -58,7 +58,102 @@ const TOOL_SCHEMA = {
   },
 };
 
-function buildPrompt(state: StrategyState, goal: Goal, recent: LedgerRow[]): string {
+function categorizeExit(reason: string): string {
+  if (reason.includes("stop-loss hit")) return "stop-loss";
+  if (reason.includes("take-profit hit")) return "take-profit";
+  if (reason.includes("crossover exit signal")) return "crossover-exit";
+  if (reason.includes("timeout after")) return "timeout";
+  return "other";
+}
+
+function summarizeExitTypes(recent: LedgerRow[]): string {
+  const byType = new Map<string, { wins: number; losses: number }>();
+  for (const row of recent) {
+    if (row.outcome !== "WIN" && row.outcome !== "LOSS") continue;
+    const type = categorizeExit(row.reason);
+    const bucket = byType.get(type) ?? { wins: 0, losses: 0 };
+    if (row.outcome === "WIN") bucket.wins++;
+    else bucket.losses++;
+    byType.set(type, bucket);
+  }
+  if (byType.size === 0) return "No exit-type data in this window.";
+  return Array.from(byType.entries())
+    .map(([type, { wins, losses }]) => {
+      const total = wins + losses;
+      const winRate = ((wins / total) * 100).toFixed(0);
+      return `${type}: ${total} trades, ${winRate}% win rate (${wins}W/${losses}L)`;
+    })
+    .join("; ");
+}
+
+function summarizeMemoryPerformance(ledger: LedgerRow[]): string {
+  const memoryRows = ledger.filter((row) => row.mode === "memory");
+  const taken = memoryRows.filter((row) => row.action === "BUY");
+  const skipped = memoryRows.filter((row) => row.action === "SKIP");
+  if (taken.length === 0) {
+    return `The current ${skipped.length > 0 ? "cooldown has blocked every setup it's seen so far" : "memory path has no data yet"}.`;
+  }
+  const wins = taken.filter((row) => row.outcome === "WIN").length;
+  const winRate = ((wins / taken.length) * 100).toFixed(0);
+  return (
+    `Memory mode (current cooldown applied) has taken ${taken.length} of ${taken.length + skipped.length} ` +
+    `setups it saw (${winRate}% win rate on the ones it took), skipping the rest under the active cooldown.`
+  );
+}
+
+function describeSettingsDiff(prev: StrategyState, next: StrategyState): string {
+  const parts: string[] = [];
+  if (prev.risk.stopLossPct !== next.risk.stopLossPct) {
+    parts.push(`stopLossPct ${prev.risk.stopLossPct} → ${next.risk.stopLossPct}`);
+  }
+  if (prev.risk.takeProfitPct !== next.risk.takeProfitPct) {
+    parts.push(`takeProfitPct ${prev.risk.takeProfitPct} → ${next.risk.takeProfitPct}`);
+  }
+  if (prev.memory.cooldownHours !== next.memory.cooldownHours) {
+    parts.push(`cooldownHours ${prev.memory.cooldownHours} → ${next.memory.cooldownHours}`);
+  }
+  if (prev.strategy.fastPeriod !== next.strategy.fastPeriod || prev.strategy.slowPeriod !== next.strategy.slowPeriod) {
+    parts.push(
+      `MA periods ${prev.strategy.fastPeriod}/${prev.strategy.slowPeriod} → ${next.strategy.fastPeriod}/${next.strategy.slowPeriod}`
+    );
+  }
+  return parts.length > 0 ? parts.join(", ") : "no measurable change";
+}
+
+/**
+ * Reconstructs the bot's own decision history: every past settings version,
+ * what changed to produce it, and — critically — the real win rate of the
+ * trades that happened *after* that decision took effect, so the model can
+ * see whether its own past reasoning actually panned out instead of judging
+ * every reflection in isolation with no memory of what it already tried.
+ */
+function summarizeReflectionHistory(currentState: StrategyState, closed: LedgerRow[]): string {
+  const history = listHistory();
+  const epochs = [...history, currentState];
+  if (epochs.length === 1) {
+    return "No prior reflection changes yet — this would be the first one.";
+  }
+
+  const lines: string[] = [];
+  for (let i = 0; i < epochs.length; i++) {
+    const start = epochs[i].lastReflectedTradeCount;
+    const end = i + 1 < epochs.length ? epochs[i + 1].lastReflectedTradeCount : closed.length;
+    const segment = closed.slice(start, end).filter((row) => row.outcome === "WIN" || row.outcome === "LOSS");
+    const wins = segment.filter((row) => row.outcome === "WIN").length;
+    const winRateStr = segment.length > 0 ? `${((wins / segment.length) * 100).toFixed(0)}% win rate` : "no closed trades yet";
+    const diff = i === 0 ? "initial settings" : describeSettingsDiff(epochs[i - 1], epochs[i]);
+    lines.push(`v${epochs[i].version} (${diff}): governed ${segment.length} closed trades, ${winRateStr}`);
+  }
+  return lines.join("\n");
+}
+
+function buildPrompt(
+  state: StrategyState,
+  goal: Goal,
+  recent: LedgerRow[],
+  fullLedger: LedgerRow[],
+  closed: LedgerRow[]
+): string {
   const tradeLines = recent
     .map((row, i) => {
       return (
@@ -81,14 +176,25 @@ function buildPrompt(state: StrategyState, goal: Goal, recent: LedgerRow[]): str
     `Goal this bot is being steered toward:\n` +
     `- target win rate: ${(goal.targetWinRate * 100).toFixed(0)}%\n` +
     `- max acceptable drawdown: ${(goal.maxAcceptableDrawdownPct * 100).toFixed(0)}%\n\n` +
+    `Your own decision history — what you (or the rule-based fallback) changed in the past, and how the ` +
+    `real trades that followed each decision actually performed. Use this to judge whether your past ` +
+    `reasoning was right before repeating or reversing it:\n` +
+    `${summarizeReflectionHistory(state, closed)}\n\n` +
+    `Win rate broken down by how the trade actually exited, over the trades shown below — a real pattern ` +
+    `here (e.g. timeouts losing money while crossover-exits win) is more actionable than the aggregate ` +
+    `win rate alone:\n` +
+    `${summarizeExitTypes(recent)}\n\n` +
+    `How the memory cooldown itself is performing: ${summarizeMemoryPerformance(fullLedger)}\n\n` +
     `The last ${recent.length} real closed trades (chronological, oldest first), each a genuine outcome ` +
     `from live Coinbase market data replayed through the strategy — nothing here is simulated or invented:\n` +
     `${tradeLines}\n\n` +
     `Look for real patterns (e.g. one exit type underperforming another, losses clustering around a ` +
-    `time window, the crossover firing on noise, drawdown trending against the goal) and propose a small, ` +
-    `bounded adjustment if one is genuinely justified by this data — or explicitly propose no change if ` +
-    `the data doesn't support one. Do not overfit to a handful of trades; prefer no change when the sample ` +
-    `is ambiguous. Call propose_adjustment with your decision.`
+    `time window, the crossover firing on noise, drawdown trending against the goal, a past decision that ` +
+    `didn't actually help) and propose a small, bounded adjustment if one is genuinely justified by this ` +
+    `data — or explicitly propose no change if the data doesn't support one. Do not overfit to a handful ` +
+    `of trades; prefer no change when the sample is ambiguous, and be especially cautious about reversing ` +
+    `a change you made only one checkpoint ago unless the evidence is clear. Call propose_adjustment with ` +
+    `your decision.`
   );
 }
 
@@ -234,7 +340,7 @@ export async function reflectWithLLM(): Promise<ReflectionResult> {
   const winRate = recent.length > 0 ? wins / recent.length : 0;
 
   try {
-    const proposal = await callAnthropic(apiKey, buildPrompt(state, goal, recent));
+    const proposal = await callAnthropic(apiKey, buildPrompt(state, goal, recent, ledger, closed));
     const prevVersion = JSON.parse(JSON.stringify(state)) as StrategyState;
     const next = proposal.changed ? applyClamped(state, proposal) : null;
 

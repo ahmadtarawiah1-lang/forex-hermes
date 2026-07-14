@@ -141,12 +141,21 @@ implementations behind one entrypoint, `reflectWithLLM()` in
   repository secret; **deliberately not** wired into the verify workflow, so
   CI stays deterministic and free). It sends Claude (`claude-sonnet-5`) the
   actual last `lookbackTrades` real trades — timestamps, entry prices,
-  outcomes, PnL, and the plain-English exit reason for each — and asks it to
-  reason about real patterns (an exit type underperforming, losses
-  clustering, drawdown trending the wrong way) and propose a change via a
-  structured tool call, or explicitly propose no change. It can adjust more
-  than the rule-based path: `stopLossPct`, `takeProfitPct`, `cooldownHours`,
-  and the crossover's `fastPeriod`/`slowPeriod`.
+  outcomes, PnL, and the plain-English exit reason for each — plus three
+  pieces of context the rule-based path doesn't have: a win-rate breakdown
+  by exit type (stop-loss / take-profit / crossover-exit / timeout, so "one
+  exit type is losing money" is visible instead of buried in an aggregate
+  number), how the memory cooldown itself is currently performing (trades
+  taken vs skipped and their win rate), and — most importantly — its own
+  past reflection decisions reconstructed from `data/history/`, each paired
+  with the real win rate of the trades that happened *after* that decision
+  took effect, so it can judge whether its own past reasoning actually
+  panned out instead of treating every reflection as if it had no memory of
+  what it already tried. It's told to be especially cautious about
+  reversing a change from only one checkpoint ago without clear evidence.
+  It can adjust more than the rule-based path: `stopLossPct`,
+  `takeProfitPct`, `cooldownHours`, and the crossover's
+  `fastPeriod`/`slowPeriod`.
 
   **The model never writes to `strategy_state.json` directly.** Every
   proposed value is clamped in code (`applyClamped()`) to a hard-coded safe
@@ -186,7 +195,10 @@ Edit `data/goal.json` any time to change what "on track" means.
 - `src/memory.ts` / `src/adaptiveFilter.ts` — ledger/learnings I/O and the
   "have we lost on this before" check.
 - `src/config.ts` — loads/saves `data/strategy_state.json` and
-  `data/goal.json`; archives a version snapshot before any reflection change.
+  `data/goal.json`; archives a version snapshot before any reflection
+  change; `listHistory()` reads every archived version back, oldest first,
+  which is how the LLM reflection path reconstructs its own decision
+  history.
 - `src/reflect.ts` — the deterministic rule-based reflection.
 - `src/llmReflect.ts` — the LLM-in-the-loop reflection entrypoint
   (`reflectWithLLM()`), the Claude API call, and the clamping/validation that
