@@ -216,10 +216,13 @@ Edit `data/goal.json` any time to change what "on track" means.
   exists as a guardrail (SKIP) in case these two settings are ever changed
   independently.
 - Max daily drawdown: 5%. Once the day's realized paper losses reach 5% of
-  that day's starting equity, new trades SKIP for the rest of the day. (This
-  gate only applies to `scan`'s live-instant check; `replay` backtests don't
-  track calendar days, so it isn't exercised there — noted here rather than
-  silently glossed over.)
+  that day's starting equity (UTC calendar day), new trades SKIP for the
+  rest of the day and resume automatically at the next day boundary. `src/replay.ts`
+  tracks this by the entry time of each setup, so it's enforced in the actual
+  path the scheduled live workflow runs (`replay:raw`/`replay:memory`), not
+  only in `scan`'s live-instant check. (An earlier version of this project
+  reset the day's realized PnL to $0 on every single setup check, which
+  meant this gate could never actually trigger in replay — fixed.)
 - Memory cooldown: a same-symbol, same-action `LOSS` blocks repeats for 24
   hours, then trading resumes automatically — see `src/adaptiveFilter.ts`.
   An earlier version of this rule blocked a symbol forever after any single
