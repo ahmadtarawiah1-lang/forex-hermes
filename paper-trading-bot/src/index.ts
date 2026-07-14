@@ -3,7 +3,8 @@ import { runReplay, ReplaySummary } from "./replay";
 import { resetMemory, readLedger, readLearnings } from "./memory";
 import { MarketDataError } from "./market";
 import { loadState } from "./config";
-import { reflect, ReflectionResult } from "./reflect";
+import { ReflectionResult } from "./reflect";
+import { reflectWithLLM } from "./llmReflect";
 
 const state = loadState();
 const strategyConfig = state.strategy;
@@ -60,7 +61,7 @@ function printSummary(label: string, summary: ReplaySummary): void {
 }
 
 function printReflection(result: ReflectionResult): void {
-  console.log(`\n=== reflection ===`);
+  console.log(`\n=== reflection (${result.decidedBy ?? "heuristic"}) ===`);
   if (result.changed) {
     console.log(`Strategy CHANGED. ${result.reason}`);
   } else {
@@ -80,7 +81,7 @@ async function main(): Promise<void> {
       case "replay:raw": {
         const summary = await runReplay(strategyConfig, riskConfig, "raw", cooldownMs);
         printSummary("replay:raw (no memory)", summary);
-        printReflection(reflect());
+        printReflection(await reflectWithLLM());
         break;
       }
 
@@ -96,12 +97,12 @@ async function main(): Promise<void> {
         const summary = await runReplay(strategyConfig, riskConfig, "memory", cooldownMs);
         printSummary("replay:memory (memory-enabled)", summary);
         console.log(`\nLatest learnings.md:\n${readLearnings()}`);
-        printReflection(reflect());
+        printReflection(await reflectWithLLM());
         break;
       }
 
       case "reflect":
-        printReflection(reflect());
+        printReflection(await reflectWithLLM());
         break;
 
       case "memory:reset":

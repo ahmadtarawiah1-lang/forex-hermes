@@ -14,6 +14,9 @@ jobs:
     defaults:
       run:
         working-directory: paper-trading-bot
+    # Deliberately no ANTHROPIC_API_KEY here: verify must stay deterministic,
+    # free, and fast, so it always exercises reflectWithLLM()'s rule-based
+    # fallback path rather than making a real model call on every push/PR.
     steps:
       - uses: actions/checkout@v4
 

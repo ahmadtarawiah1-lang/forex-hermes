@@ -73,6 +73,20 @@ export function archiveState(state: StrategyState): void {
   fs.writeFileSync(path.join(HISTORY_DIR, `v${state.version}.json`), JSON.stringify(state, null, 2) + "\n");
 }
 
+/**
+ * Every archived strategy_state.json snapshot, oldest first. Each entry is
+ * the state as it was right before the reflection that superseded it — so
+ * reading them in order reconstructs the bot's own settings history.
+ */
+export function listHistory(): StrategyState[] {
+  if (!fs.existsSync(HISTORY_DIR)) return [];
+  return fs
+    .readdirSync(HISTORY_DIR)
+    .filter((f) => /^v\d+\.json$/.test(f))
+    .sort((a, b) => parseInt(a.slice(1), 10) - parseInt(b.slice(1), 10))
+    .map((f) => JSON.parse(fs.readFileSync(path.join(HISTORY_DIR, f), "utf-8")) as StrategyState);
+}
+
 export function loadGoal(): Goal {
   ensureDataDir();
   if (!fs.existsSync(GOAL_PATH)) {

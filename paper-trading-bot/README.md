@@ -5,7 +5,10 @@ TypeScript/Node.js. It runs a 9/21 moving-average crossover strategy against
 real Coinbase market data, sizes trades by risking 2% of equity per trade,
 learns from its own real closed trades via a two-file memory system, and
 periodically **reflects** — scoring its recent real performance against a
-goal and adjusting exactly one risk/memory setting when it's off track.
+goal and adjusting its risk/strategy/memory settings when it's off track.
+Reflection has two implementations: a deterministic rule-based one and an
+LLM-in-the-loop one (Claude reasons over the actual recent trades instead of
+two fixed levers) — see "How it learns" below for how they relate.
 
 Originally built against Binance's public klines endpoint (BTCUSDT). CI
 (GitHub Actions) showed that endpoint returns HTTP 451 — Binance geo-blocks
@@ -34,10 +37,10 @@ this bot was built from.
   hours — a bounded cooldown, not a permanent ban (see Risk model below for
   why permanent was rejected).
 - Every 10 new real closed trades, **reflects**: scores the last 20 against
-  `data/goal.json` and changes exactly one thing in `data/strategy_state.json`
-  — tighten risk/stop if drawdown breached the goal, widen the memory
-  cooldown if win rate is below target, or nothing if the goal is met. Old
-  versions are archived to `data/history/`. See "How it learns," below.
+  `data/goal.json` and adjusts `data/strategy_state.json` — with an LLM
+  (Claude) reasoning over the actual trades when `ANTHROPIC_API_KEY` is set,
+  or a deterministic rule-based fallback when it isn't. Old versions are
+  archived to `data/history/`. See "How it learns," below.
 
 ## Install
 
@@ -49,6 +52,16 @@ npm install
 
 No `.env` file is required for the default setup — see `.env.example` for
 what it's for if you ever add a verified paper broker adapter.
+
+### Optional: enabling LLM-in-the-loop reflection
+
+Set `ANTHROPIC_API_KEY` (locally as an env var, or as a repository secret
+named `ANTHROPIC_API_KEY` for the live workflow) to have reflection reason
+over real trades with Claude instead of the two-lever heuristic. This is
+entirely optional — with no key set, reflection runs the deterministic
+rule-based path automatically and nothing else changes. No other setup is
+required; the call uses the global `fetch` already in use elsewhere in this
+project, no new dependency was added.
 
 ## Commands
 
@@ -107,27 +120,72 @@ without that, the hourly job would re-log near-duplicate rows for the same
 handful of real trades every hour and corrupt the "10 new closed trades"
 count reflection depends on.
 
-**Reflection** (`src/reflect.ts`) is deliberately blunt and auditable, not a
-model: every `reflectionEvery` (default 10) new real closed trades, it looks
-at the last `lookbackTrades` (default 20), and:
+**Reflection** runs every `reflectionEvery` (default 10) new real closed
+trades, scoring the last `lookbackTrades` (default 20). There are two
+implementations behind one entrypoint, `reflectWithLLM()` in
+`src/llmReflect.ts`, which every call site uses:
 
-1. If realized drawdown over that window breached `maxAcceptableDrawdownPct`
-   (default 8%) → tighten `stopLossPct`/`riskPctPerTrade` together (keeping
-   them equal preserves the no-leverage invariant — see Risk model) and
-   rescale `takeProfitPct` to keep the 2:1 ratio.
-2. Else if win rate over that window is below `targetWinRate` (default 55%)
-   → widen the memory cooldown (`+12h`, capped at 72h).
-3. Else → no change; the goal is being met.
+- **Rule-based** (`src/reflect.ts`, `reflect()`) — deliberately blunt and
+  auditable, not a model. It changes exactly **one** thing per reflection:
+  1. If realized drawdown over the window breached `maxAcceptableDrawdownPct`
+     (default 8%) → tighten `stopLossPct`/`riskPctPerTrade` together (keeping
+     them equal preserves the no-leverage invariant — see Risk model) and
+     rescale `takeProfitPct` to keep the 2:1 ratio.
+  2. Else if win rate over the window is below `targetWinRate` (default 55%)
+     → widen the memory cooldown (`+12h`, capped at 72h).
+  3. Else → no change; the goal is being met.
 
-Only ever **one** change per reflection. The version before the change is
-archived to `data/history/vN.json`, the live state's version number bumps,
-and a plain-English line gets appended to `data/learnings.md` explaining
-why. Edit `data/goal.json` any time to change what "on track" means.
+- **LLM-in-the-loop** (`src/llmReflect.ts`, `reflectWithLLM()`) — used
+  automatically whenever the `ANTHROPIC_API_KEY` environment variable is set
+  (wired into `paper-trading-bot-live.yml` from the `ANTHROPIC_API_KEY`
+  repository secret; **deliberately not** wired into the verify workflow, so
+  CI stays deterministic and free). It sends Claude (`claude-sonnet-5`) the
+  actual last `lookbackTrades` real trades — timestamps, entry prices,
+  outcomes, PnL, and the plain-English exit reason for each — plus three
+  pieces of context the rule-based path doesn't have: a win-rate breakdown
+  by exit type (stop-loss / take-profit / crossover-exit / timeout, so "one
+  exit type is losing money" is visible instead of buried in an aggregate
+  number), how the memory cooldown itself is currently performing (trades
+  taken vs skipped and their win rate), and — most importantly — its own
+  past reflection decisions reconstructed from `data/history/`, each paired
+  with the real win rate of the trades that happened *after* that decision
+  took effect, so it can judge whether its own past reasoning actually
+  panned out instead of treating every reflection as if it had no memory of
+  what it already tried. It's told to be especially cautious about
+  reversing a change from only one checkpoint ago without clear evidence.
+  It can adjust more than the rule-based path: `stopLossPct`,
+  `takeProfitPct`, `cooldownHours`, and the crossover's
+  `fastPeriod`/`slowPeriod`.
+
+  **The model never writes to `strategy_state.json` directly.** Every
+  proposed value is clamped in code (`applyClamped()`) to a hard-coded safe
+  range before it's applied — `stopLossPct` ∈ [0.5%, 5%], `cooldownHours` ∈
+  [4h, 72h], MA periods bounded and required to keep a minimum 5-candle
+  separation (a swapped/degenerate proposal like fast=30/slow=10 is rejected
+  outright, not silently clamped into a barely-valid fast=15/slow=16). The
+  no-leverage invariant (`riskPctPerTrade === stopLossPct`) and the
+  `maxPositionPctOfEquity`/`maxDailyDrawdownPct` caps are enforced in code
+  and are never exposed to the model at all.
+
+  If the API call fails for any reason (no key, network error, bad
+  response, malformed tool call) it falls back to the rule-based `reflect()`
+  for that cycle and logs the failure to `data/learnings.md` — the hourly
+  pipeline never breaks because of this.
+
+Either way: a real change archives the version before it to
+`data/history/vN.json`, bumps the live state's version number, and appends a
+plain-English line to `data/learnings.md` — tagged `(LLM, claude-sonnet-5)`
+or left untagged for the rule-based path — explaining why. `ReflectionResult.decidedBy`
+records which path actually decided (`"llm"` or `"heuristic"`) each run.
+Edit `data/goal.json` any time to change what "on track" means.
 
 ## Where things live
 
 - `src/market.ts` — Coinbase public candles fetch (auto-paginates past the
-  300-candle-per-request cap).
+  300-candle-per-request cap, de-duplicating by candle open time — adjacent
+  pages share a boundary timestamp, and without de-duping, a candle observed
+  at that boundary would get double-counted by the moving averages once per
+  page, roughly once a day for 5m candles).
 - `src/strategy.ts` — moving-average crossover signal.
 - `src/risk.ts` — position sizing, stop/target, max-position and
   max-daily-drawdown checks.
@@ -137,8 +195,15 @@ why. Edit `data/goal.json` any time to change what "on track" means.
 - `src/memory.ts` / `src/adaptiveFilter.ts` — ledger/learnings I/O and the
   "have we lost on this before" check.
 - `src/config.ts` — loads/saves `data/strategy_state.json` and
-  `data/goal.json`; archives a version snapshot before any reflection change.
-- `src/reflect.ts` — the reflection loop described above.
+  `data/goal.json`; archives a version snapshot before any reflection
+  change; `listHistory()` reads every archived version back, oldest first,
+  which is how the LLM reflection path reconstructs its own decision
+  history.
+- `src/reflect.ts` — the deterministic rule-based reflection.
+- `src/llmReflect.ts` — the LLM-in-the-loop reflection entrypoint
+  (`reflectWithLLM()`), the Claude API call, and the clamping/validation that
+  bounds every value it can propose. Falls back to `src/reflect.ts` when no
+  `ANTHROPIC_API_KEY` is set or the call fails.
 - `src/bot.ts` / `src/index.ts` — the `scan` command and CLI entrypoint.
 - `data/goal.json` — what "on track" means (target win rate, max acceptable
   drawdown, how often to reflect). Tracked in git; edit any time.
@@ -166,10 +231,13 @@ why. Edit `data/goal.json` any time to change what "on track" means.
   exists as a guardrail (SKIP) in case these two settings are ever changed
   independently.
 - Max daily drawdown: 5%. Once the day's realized paper losses reach 5% of
-  that day's starting equity, new trades SKIP for the rest of the day. (This
-  gate only applies to `scan`'s live-instant check; `replay` backtests don't
-  track calendar days, so it isn't exercised there — noted here rather than
-  silently glossed over.)
+  that day's starting equity (UTC calendar day), new trades SKIP for the
+  rest of the day and resume automatically at the next day boundary. `src/replay.ts`
+  tracks this by the entry time of each setup, so it's enforced in the actual
+  path the scheduled live workflow runs (`replay:raw`/`replay:memory`), not
+  only in `scan`'s live-instant check. (An earlier version of this project
+  reset the day's realized PnL to $0 on every single setup check, which
+  meant this gate could never actually trigger in replay — fixed.)
 - Memory cooldown: a same-symbol, same-action `LOSS` blocks repeats for 24
   hours, then trading resumes automatically — see `src/adaptiveFilter.ts`.
   An earlier version of this rule blocked a symbol forever after any single
@@ -217,3 +285,9 @@ is also fine (bump the version yourself if you do).
   fixture candles.
 - Memory only ever learns from real replay/paper outcomes; nothing is
   seeded.
+- The optional LLM reflection path is advisory only: it can propose numeric
+  config changes within hard-coded bounds and cannot execute any code, place
+  any order, or write to any file itself — `src/llmReflect.ts` does all
+  writing, after clamping. A missing key, network failure, or malformed
+  response always degrades to the deterministic rule-based path, never to a
+  crash or a skipped reflection.

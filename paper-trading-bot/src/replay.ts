@@ -108,6 +108,15 @@ export async function runReplay(
   let inTradeUntil = -1;
   let learnedLossThisRun = false;
 
+  // Real day-boundary tracking (UTC calendar date of each setup's entry
+  // time) so maxDailyDrawdownPct is actually enforced here, not just in
+  // `scan`'s live-instant check. Previously this was reset to 0 on every
+  // single setup, which meant the daily-drawdown gate could never trigger
+  // in replay — the only path the scheduled live workflow actually runs.
+  let currentDay: string | null = null;
+  let dayStartEquity = runningEquity;
+  let dayRealizedPnl = 0;
+
   for (let i = 1; i < candles.length; i++) {
     if (i <= inTradeUntil) continue;
 
@@ -117,6 +126,15 @@ export async function runReplay(
     totalSetups++;
     const entryPrice = candles[i].close;
     const entryTime = new Date(candles[i].closeTime).toISOString();
+
+    const entryDay = entryTime.slice(0, 10); // UTC "YYYY-MM-DD"
+    if (currentDay === null) {
+      currentDay = entryDay;
+    } else if (entryDay !== currentDay) {
+      currentDay = entryDay;
+      dayStartEquity = runningEquity;
+      dayRealizedPnl = 0;
+    }
 
     if (mode === "memory") {
       const memCheck = checkMemory(strategy.symbol, "BUY", entryTime, cooldownMs);
@@ -143,8 +161,8 @@ export async function runReplay(
 
     const risk = evaluateRisk("BUY", entryPrice, riskConfig, {
       equity: runningEquity,
-      dayStartEquity: runningEquity,
-      dayRealizedPnl: 0,
+      dayStartEquity,
+      dayRealizedPnl,
     });
 
     if (!risk.approved) {
@@ -178,6 +196,7 @@ export async function runReplay(
     const pnl = (exit.exitPrice - entryPrice) * risk.quantity;
     const outcome: "WIN" | "LOSS" = pnl >= 0 ? "WIN" : "LOSS";
     runningEquity += pnl;
+    dayRealizedPnl += pnl;
     peakEquity = Math.max(peakEquity, runningEquity);
     const drawdownPct = peakEquity > 0 ? (peakEquity - runningEquity) / peakEquity : 0;
     maxDrawdownPct = Math.max(maxDrawdownPct, drawdownPct);

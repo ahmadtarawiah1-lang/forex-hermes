@@ -7,6 +7,7 @@ export interface ReflectionResult {
   newClosedTrades: number;
   winRate: number | null;
   drawdownPct: number | null;
+  decidedBy?: "heuristic" | "llm";
 }
 
 function computeDrawdownPct(rows: LedgerRow[], startingEquity: number): number {
@@ -43,6 +44,7 @@ export function reflect(): ReflectionResult {
       newClosedTrades,
       winRate: null,
       drawdownPct: null,
+      decidedBy: "heuristic",
     };
   }
 
@@ -93,5 +95,5 @@ export function reflect(): ReflectionResult {
     appendLearning(`Reflection v${state.version}: ${reason}`);
   }
 
-  return { changed, reason, newClosedTrades, winRate, drawdownPct };
+  return { changed, reason, newClosedTrades, winRate, drawdownPct, decidedBy: "heuristic" };
 }

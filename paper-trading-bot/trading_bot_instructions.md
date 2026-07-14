@@ -132,11 +132,20 @@ above.
 - `data/strategy_state.json` is the live, evolving strategy/risk/memory
   config plus a version number — this is what `src/index.ts` actually loads
   at startup, not a hardcoded constant.
-- Every `reflectionEvery` new real closed trades, `src/reflect.ts` scores the
-  last `lookbackTrades` against the goal and changes **exactly one** thing:
-  drawdown breach → tighten stop-loss/risk (kept equal, preserving the
-  no-leverage invariant) and rescale take-profit to match; else win rate
-  below target → widen the memory cooldown; else → no change.
+- Every `reflectionEvery` new real closed trades, `reflectWithLLM()` in
+  `src/llmReflect.ts` (the single entrypoint every call site uses) scores the
+  last `lookbackTrades` against the goal:
+  - With `ANTHROPIC_API_KEY` set, it sends Claude the actual recent trades
+    and lets it reason about real patterns and propose a change to
+    stop-loss/risk, take-profit, memory cooldown, or the MA periods — every
+    proposed value is clamped to a hard-coded safe range in code before it's
+    ever applied, and the no-leverage invariant and position/drawdown caps
+    are enforced in code, never left to the model.
+  - Without a key, or if the API call fails for any reason, it falls back to
+    `src/reflect.ts`'s deterministic rule-based path, which changes
+    **exactly one** thing: drawdown breach → tighten stop-loss/risk (kept
+    equal) and rescale take-profit to match; else win rate below target →
+    widen the memory cooldown; else → no change.
 - The state version before any change is archived to `data/history/vN.json`
   and a plain-English line is appended to `data/learnings.md` explaining
   why. Nothing is ever seeded — only real closed trades feed this.
