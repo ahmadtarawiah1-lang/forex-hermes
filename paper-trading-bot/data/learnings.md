@@ -126,3 +126,6 @@ or the memory-enabled path actually observes a losing setup.
 - [2026-08-01T08:57:38.088Z] Reflection v13: Win rate over the last 20 closed trades was 20.0%, below the 55.0% goal. Extending the memory cooldown from 72h to 72h so a loss is avoided for longer before repeating.
 - [2026-08-01T16:32:06.217Z] BTC-USD BUY crossover entered at 63044.00 on 2026-08-01T14:34:59.999Z closed as a LOSS (bearish crossover exit signal at 63000.00, pnl $-6.77). Treat repeats of this setup with caution.
 - [2026-08-02T11:38:02.960Z] BTC-USD BUY crossover entered at 63173.10 on 2026-08-02T10:04:59.999Z closed as a LOSS (bearish crossover exit signal at 63073.86, pnl $-15.45). Treat repeats of this setup with caution.
+- [2026-08-02T15:46:45.976Z] BTC-USD BUY crossover entered at 63080.07 on 2026-08-02T12:44:59.999Z closed as a LOSS (bearish crossover exit signal at 62999.99, pnl $-12.44). Treat repeats of this setup with caution.
+- [2026-08-02T15:46:45.977Z] BTC-USD BUY crossover entered at 63062.04 on 2026-08-02T14:29:59.999Z closed as another LOSS (bearish crossover exit signal at 63039.23, pnl $-3.54).
+- [2026-08-02T15:46:45.986Z] Reflection v14: Win rate over the last 20 closed trades was 40.0%, below the 55.0% goal. Extending the memory cooldown from 72h to 72h so a loss is avoided for longer before repeating.
