@@ -1,6 +1,6 @@
 {
-  "version": 33,
-  "updatedAt": "2026-09-21T05:51:49.336Z",
+  "version": 32,
+  "updatedAt": "2026-09-19T23:52:18.807Z",
   "strategy": {
     "symbol": "BTC-USD",
     "interval": "5m",
@@ -18,5 +18,5 @@
   "memory": {
     "cooldownHours": 72
   },
-  "lastReflectedTradeCount": 603
+  "lastReflectedTradeCount": 592
 }
