@@ -1,0 +1,22 @@
+{
+  "version": 54,
+  "updatedAt": "2026-10-24T14:13:53.922Z",
+  "strategy": {
+    "symbol": "BTC-USD",
+    "interval": "5m",
+    "fastPeriod": 9,
+    "slowPeriod": 21
+  },
+  "risk": {
+    "startingEquity": 10000,
+    "riskPctPerTrade": 0.02,
+    "stopLossPct": 0.02,
+    "takeProfitPct": 0.04,
+    "maxPositionPctOfEquity": 1.05,
+    "maxDailyDrawdownPct": 0.05
+  },
+  "memory": {
+    "cooldownHours": 72
+  },
+  "lastReflectedTradeCount": 885
+}
