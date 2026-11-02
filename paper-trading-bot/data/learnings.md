@@ -573,3 +573,6 @@ or the memory-enabled path actually observes a losing setup.
 - [2026-11-02T01:13:42.826Z] BTC-USD BUY crossover entered at 78025.90 on 2026-11-01T23:14:59.999Z closed as a LOSS (bearish crossover exit signal at 78000.73, pnl $-3.23). Treat repeats of this setup with caution.
 - [2026-11-02T08:50:21.236Z] BTC-USD BUY crossover entered at 78460.97 on 2026-11-02T01:24:59.999Z closed as a LOSS (bearish crossover exit signal at 78342.29, pnl $-15.25). Treat repeats of this setup with caution.
 - [2026-11-02T08:50:21.236Z] BTC-USD BUY crossover entered at 78418.22 on 2026-11-02T03:09:59.999Z closed as another LOSS (bearish crossover exit signal at 78396.15, pnl $-2.83).
+- [2026-11-02T19:07:46.154Z] BTC-USD BUY crossover entered at 77927.17 on 2026-11-02T12:24:59.999Z closed as a LOSS (bearish crossover exit signal at 77674.24, pnl $-32.31). Treat repeats of this setup with caution.
+- [2026-11-02T19:07:46.154Z] BTC-USD BUY crossover entered at 77797.47 on 2026-11-02T13:59:59.999Z closed as another LOSS (bearish crossover exit signal at 77721.32, pnl $-9.71).
+- [2026-11-02T19:07:46.154Z] BTC-USD BUY crossover entered at 77872.69 on 2026-11-02T15:44:59.999Z closed as another LOSS (bearish crossover exit signal at 77590.75, pnl $-35.89).
