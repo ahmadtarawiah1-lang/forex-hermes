@@ -1971,3 +1971,9 @@ timestamp,symbol,action,price,quantity,reason,mode,outcome,pnl
 2026-11-06T22:09:59.999Z,BTC-USD,BUY,75932.55,0.133791,Fast MA(9)=75762.23 crossed above Slow MA(21)=75759.96 on this candle (fresh bullish crossover). Exit: bearish crossover exit signal at 75785.30.,raw,LOSS,-19.70
 2026-11-06T20:14:59.999Z,BTC-USD,SKIP,75717.56,0.000000,Blocked by memory: a real BUY on BTC-USD at price 75717.56 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
 2026-11-06T22:09:59.999Z,BTC-USD,SKIP,75932.55,0.000000,Blocked by memory: a real BUY on BTC-USD at price 75932.55 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
+2026-11-07T00:29:59.999Z,BTC-USD,BUY,75827.99,0.132961,Fast MA(9)=75830.17 crossed above Slow MA(21)=75829.05 on this candle (fresh bullish crossover). Exit: bearish crossover exit signal at 75802.60.,raw,LOSS,-3.38
+2026-11-07T00:44:59.999Z,BTC-USD,BUY,75809.48,0.132949,Fast MA(9)=75830.17 crossed above Slow MA(21)=75824.88 on this candle (fresh bullish crossover). Exit: bearish crossover exit signal at 75788.43.,raw,LOSS,-2.80
+2026-11-07T01:44:59.999Z,BTC-USD,BUY,75905.90,0.132743,Fast MA(9)=75826.67 crossed above Slow MA(21)=75823.77 on this candle (fresh bullish crossover). Exit: timeout after 20 candles at 75901.20.,raw,LOSS,-0.62
+2026-11-07T00:29:59.999Z,BTC-USD,SKIP,75827.99,0.000000,Blocked by memory: a real BUY on BTC-USD at price 75827.99 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
+2026-11-07T00:44:59.999Z,BTC-USD,SKIP,75809.48,0.000000,Blocked by memory: a real BUY on BTC-USD at price 75809.48 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
+2026-11-07T01:44:59.999Z,BTC-USD,SKIP,75905.90,0.000000,Blocked by memory: a real BUY on BTC-USD at price 75905.9 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
