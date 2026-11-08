@@ -2003,3 +2003,5 @@ timestamp,symbol,action,price,quantity,reason,mode,outcome,pnl
 2026-11-08T11:19:59.999Z,BTC-USD,SKIP,75868.49,0.000000,Blocked by memory: a real BUY on BTC-USD at price 75868.49 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
 2026-11-08T13:14:59.999Z,BTC-USD,SKIP,76015.63,0.000000,Blocked by memory: a real BUY on BTC-USD at price 76015.63 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
 2026-11-08T14:59:59.999Z,BTC-USD,SKIP,75936.10,0.000000,Blocked by memory: a real BUY on BTC-USD at price 76015.63 closed as a LOSS 1.8h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
+2026-11-08T18:24:59.999Z,BTC-USD,BUY,75810.08,0.129119,Fast MA(9)=75722.64 crossed above Slow MA(21)=75701.18 on this candle (fresh bullish crossover). Exit: bearish crossover exit signal at 75772.37.,raw,LOSS,-4.87
+2026-11-08T18:24:59.999Z,BTC-USD,SKIP,75810.08,0.000000,Blocked by memory: a real BUY on BTC-USD at price 75810.08 closed as a LOSS 0.0h ago (within the 72h cooldown). SKIP.,memory,NONE,0.00
